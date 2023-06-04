@@ -1,5 +1,8 @@
 import type { AWS } from '@serverless/typescript';
 
+
+const bucketName = 'pi-sensor-service-site';
+
 const serverlessConfiguration: AWS = {
   service: 'pi-sensor-service',
   custom: {
@@ -28,13 +31,19 @@ const serverlessConfiguration: AWS = {
     environment: {
       AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1',
       NODE_OPTIONS: '--enable-source-maps --stack-trace-limit=1000',
-      TABLE_NAME: 'SensorData'
+      TABLE_NAME: 'SensorData',
+      BUCKET_NAME: bucketName,
     },
     iamRoleStatements: [
       {
         Effect: 'Allow',
         Action: ['dynamodb:*'],
         Resource: '*'
+      },
+      {
+        Effect: 'Allow',
+        Action: ['s3:*'],
+        Resource: `arn:aws:s3:::${bucketName}/*`
       }
     ],
   },
@@ -61,9 +70,6 @@ const serverlessConfiguration: AWS = {
         },
       ],
     },
-    embedHtml: {
-      handler: 'src/embedHtml.handler',
-    }
   },
   resources: {
     Resources: {
@@ -88,6 +94,33 @@ const serverlessConfiguration: AWS = {
             WriteCapacityUnits: 1
           }
         }
+      },
+      WebsiteBucket: {
+        Type: 'AWS::S3::Bucket',
+        Properties: {
+          BucketName: bucketName,
+          WebsiteConfiguration: {
+            IndexDocument: 'index.html',
+            ErrorDocument: 'error.html',
+          },
+        },
+      },
+      BucketPolicy: {
+        Type: 'AWS::S3::BucketPolicy',
+        Properties: {
+          Bucket: { Ref: 'WebsiteBucket' },
+          PolicyDocument: {
+            Statement: [
+              {
+                Sid: 'PublicReadGetObject',
+                Effect: 'Allow',
+                Principal: '*',
+                Action: 's3:GetObject',
+                Resource: {"Fn::Join": ["", ["arn:aws:s3:::", { "Ref": "WebsiteBucket" }, "/*"]]}, 
+              },
+            ],
+          },
+        },
       },
     }
   }
