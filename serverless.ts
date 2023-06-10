@@ -20,8 +20,29 @@ const serverlessConfiguration: AWS = {
       platform: 'node',
       concurrency: 10,
     },
+    customDomain: {
+      domainName: 'projects.redcloversoftware.ca',
+      basePath: 'nswildfire-airqualitystation',
+      stage: '${self:provider.stage}',
+      createRoute53Record: true,
+      certificateArn: process.env.api_cert_arn,
+    },
+    customCertificate: {
+      certificateName: 'nswildfire.redcloversoftware.ca',
+      hostedZoneNames: 'redcloversoftware.ca.',
+      region: 'us-east-1', // Cloudfront needs the cert to be in us-east-1
+      rewriteRecords: true,
+      certificateArnOutputName: 'nswildfireCertArn'
+    },
+    cloudfrontInvalidate: [	
+      {	
+        distributionIdKey: "CloudFrontDistribution",	
+        autoInvalidate: true,	
+        items: ["/*"]	
+      }	
+    ]
   },
-  plugins: ['serverless-webpack'],
+  plugins: ['serverless-webpack', 'serverless-cloudfront-invalidate', 'serverless-domain-manager', 'serverless-certificate-creator'],
   provider: {
     name: 'aws',
     runtime: 'nodejs16.x',
@@ -73,6 +94,71 @@ const serverlessConfiguration: AWS = {
   },
   resources: {
     Resources: {
+      CloudFrontOriginAccessIdentity: {
+        Type: 'AWS::CloudFront::CloudFrontOriginAccessIdentity',
+        Properties: {
+          CloudFrontOriginAccessIdentityConfig: {
+            Comment: 'Access identity for CloudFront to access S3 bucket',
+          },
+        },
+      },
+      CloudFrontDistribution: {	
+        Type: "AWS::CloudFront::Distribution",	
+        Properties: {	
+          DistributionConfig: {	
+            Enabled: true,	
+            DefaultRootObject: "index.html",
+            Aliases: [ "nswildfire.redcloversoftware.ca" ],
+            Origins: [    
+              {    
+                DomainName: {
+                  'Fn::Sub': '${WebsiteBucket}.s3-website-${AWS::Region}.amazonaws.com'
+                },    
+                Id: "S3Origin",    
+                CustomOriginConfig: {
+                  HTTPPort: 80,
+                  HTTPSPort: 443,
+                  OriginProtocolPolicy: "http-only",
+                }    
+              }    
+            ],
+            DefaultCacheBehavior: {	
+              TargetOriginId: "S3Origin",	
+              ViewerProtocolPolicy: "redirect-to-https",	
+              AllowedMethods: ["GET", "HEAD"],	
+              ForwardedValues: {	
+                QueryString: false,	
+                Cookies: {	
+                  Forward: "none"	
+                }	
+              },	
+              MinTTL: 0,	
+              MaxTTL: 0,	
+              DefaultTTL: 0	
+            },	
+            PriceClass: "PriceClass_100",	
+            HttpVersion: "http2",
+            ViewerCertificate: {
+              AcmCertificateArn: '${certificate(${self:custom.customCertificate.certificateName}):CertificateArn}',
+              SslSupportMethod: 'sni-only',
+              MinimumProtocolVersion: 'TLSv1.2_2018',
+            },
+          }	
+        }	
+      },
+      Route53RecordSet: {
+        Type: 'AWS::Route53::RecordSet',
+        Properties: {
+          HostedZoneName: 'redcloversoftware.ca.',
+          Comment: 'Record set for CloudFront distribution',
+          Name: 'nswildfire.redcloversoftware.ca.',
+          Type: 'A',
+          AliasTarget: {
+            DNSName: { 'Fn::GetAtt': ['CloudFrontDistribution', 'DomainName'] },
+            HostedZoneId: process.env.hosted_zone_id, // this is a fixed value for CloudFront
+          },
+        },
+      },
       SensorDataTable: {
         Type: 'AWS::DynamoDB::Table',
         Properties: {
@@ -122,6 +208,14 @@ const serverlessConfiguration: AWS = {
           },
         },
       },
+    },
+    Outputs: {
+      CloudFrontDistribution: {
+        Description: "CloudFront Distribution ID",
+        Value: {
+          Ref: "CloudFrontDistribution"
+        }
+      }
     }
   }
 };
