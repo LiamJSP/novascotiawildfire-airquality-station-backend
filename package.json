@@ -24,6 +24,7 @@
     "serverless-certificate-creator": "^1.6.0",
     "serverless-cloudfront-invalidate": "^1.12.2",
     "serverless-esbuild": "^1.23.3",
+    "serverless-s3-cleaner": "^2.0.2",
     "serverless-webpack": "^5.11.0",
     "ts-loader": "^9.4.3",
     "ts-node": "^10.4.0",

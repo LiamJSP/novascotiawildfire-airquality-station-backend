@@ -40,9 +40,18 @@ const serverlessConfiguration: AWS = {
         autoInvalidate: true,	
         items: ["/*"]	
       }	
-    ]
+    ],
+    'serverless-s3-cleaner': {
+      prompt: false,
+      buckets: [
+        bucketName
+      ],
+      bucketsToCleanOnDeploy: [
+        bucketName,
+      ],
+    },
   },
-  plugins: ['serverless-webpack', 'serverless-cloudfront-invalidate', 'serverless-domain-manager', 'serverless-certificate-creator'],
+  plugins: ['serverless-webpack', 'serverless-cloudfront-invalidate', 'serverless-domain-manager', 'serverless-certificate-creator', 'serverless-s3-cleaner'],
   provider: {
     name: 'aws',
     runtime: 'nodejs16.x',
@@ -53,7 +62,6 @@ const serverlessConfiguration: AWS = {
       AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1',
       NODE_OPTIONS: '--enable-source-maps --stack-trace-limit=1000',
       TABLE_NAME: 'SensorData',
-      BUCKET_NAME: bucketName,
     },
     iamRoleStatements: [
       {
@@ -64,8 +72,17 @@ const serverlessConfiguration: AWS = {
       {
         Effect: 'Allow',
         Action: ['s3:*'],
-        Resource: `arn:aws:s3:::${bucketName}/*`
-      }
+        Resource: {
+          'Fn::Join': [
+            '', // separator
+            [
+              'arn:aws:s3:::',
+              { Ref: 'WebsiteBucket' },
+              '/*',
+            ],
+          ],
+        },
+      },
     ],
   },
   functions: { 
@@ -155,7 +172,7 @@ const serverlessConfiguration: AWS = {
           Type: 'A',
           AliasTarget: {
             DNSName: { 'Fn::GetAtt': ['CloudFrontDistribution', 'DomainName'] },
-            HostedZoneId: process.env.hosted_zone_id, // this is a fixed value for CloudFront
+            HostedZoneId: process.env.hosted_zone_id,
           },
         },
       },
@@ -188,6 +205,12 @@ const serverlessConfiguration: AWS = {
           WebsiteConfiguration: {
             IndexDocument: 'index.html',
             ErrorDocument: 'error.html',
+          },
+          PublicAccessBlockConfiguration: {
+            BlockPublicAcls: false,
+            BlockPublicPolicy: false,
+            IgnorePublicAcls: false,
+            RestrictPublicBuckets: false
           },
         },
       },
