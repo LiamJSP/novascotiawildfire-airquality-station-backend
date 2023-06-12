@@ -62,6 +62,7 @@ const serverlessConfiguration: AWS = {
       AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1',
       NODE_OPTIONS: '--enable-source-maps --stack-trace-limit=1000',
       TABLE_NAME: 'SensorData',
+      BUCKET_NAME: bucketName,
     },
     iamRoleStatements: [
       {
@@ -129,16 +130,16 @@ const serverlessConfiguration: AWS = {
             Origins: [    
               {    
                 DomainName: {
-                  'Fn::Sub': '${WebsiteBucket}.s3-website-${AWS::Region}.amazonaws.com'
-                },    
+                  'Fn::Join': ['', [{ Ref: 'WebsiteBucket' }, '.s3.', { Ref: 'AWS::Region' }, '.amazonaws.com']]
+                },                   
                 Id: "S3Origin",    
-                CustomOriginConfig: {
-                  HTTPPort: 80,
-                  HTTPSPort: 443,
-                  OriginProtocolPolicy: "http-only",
-                }    
+                S3OriginConfig: {
+                  OriginAccessIdentity: {
+                    'Fn::Sub': 'origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}'
+                  }
+                }
               }    
-            ],
+            ],            
             DefaultCacheBehavior: {	
               TargetOriginId: "S3Origin",	
               ViewerProtocolPolicy: "redirect-to-https",	
@@ -206,11 +207,12 @@ const serverlessConfiguration: AWS = {
             IndexDocument: 'index.html',
             ErrorDocument: 'error.html',
           },
-          PublicAccessBlockConfiguration: {
-            BlockPublicAcls: false,
-            BlockPublicPolicy: false,
-            IgnorePublicAcls: false,
-            RestrictPublicBuckets: false
+          OwnershipControls: {
+            Rules: [
+              {
+                ObjectOwnership: 'ObjectWriter',
+              },
+            ],
           },
         },
       },
@@ -223,14 +225,16 @@ const serverlessConfiguration: AWS = {
               {
                 Sid: 'PublicReadGetObject',
                 Effect: 'Allow',
-                Principal: '*',
+                Principal: {
+                  CanonicalUser: { 'Fn::GetAtt': ['CloudFrontOriginAccessIdentity', 'S3CanonicalUserId'] }
+                },
                 Action: 's3:GetObject',
                 Resource: {"Fn::Join": ["", ["arn:aws:s3:::", { "Ref": "WebsiteBucket" }, "/*"]]}, 
               },
             ],
           },
         },
-      },
+      },    
     },
     Outputs: {
       CloudFrontDistribution: {
