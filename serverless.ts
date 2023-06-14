@@ -1,5 +1,7 @@
-import type { AWS } from '@serverless/typescript';
+// Run "sls deploy --param="api_acm_certificate_arn=123" --param="root_domain_hosted_zone_id=123"
+// You must pass in the ID of your root domain's route53 entry. At this time you must manually create the certificate for the frontend subdomain and pass it's ARN in. 
 
+import type { AWS } from '@serverless/typescript';
 
 const bucketName = 'pi-sensor-service-site';
 
@@ -20,13 +22,15 @@ const serverlessConfiguration: AWS = {
       platform: 'node',
       concurrency: 10,
     },
+    //This is for the API Endpoint
     customDomain: {
       domainName: 'projects.redcloversoftware.ca',
       basePath: 'nswildfire-airqualitystation',
       stage: '${self:provider.stage}',
       createRoute53Record: true,
-      certificateArn: process.env.api_cert_arn,
+      certificateArn: '${param:api_acm_certificate_arn}',
     },
+    //This is for the frontend web page
     customCertificate: {
       certificateName: 'nswildfire.redcloversoftware.ca',
       hostedZoneNames: 'redcloversoftware.ca.',
@@ -68,7 +72,16 @@ const serverlessConfiguration: AWS = {
       {
         Effect: 'Allow',
         Action: ['dynamodb:*'],
-        Resource: '*'
+        Resource: {
+          'Fn::Join': [
+            '', // separator
+            [
+              'arn:aws:s3:::',
+              { Ref: 'SensorDataTable' },
+              '/*',
+            ],
+          ],
+        },
       },
       {
         Effect: 'Allow',
@@ -173,7 +186,7 @@ const serverlessConfiguration: AWS = {
           Type: 'A',
           AliasTarget: {
             DNSName: { 'Fn::GetAtt': ['CloudFrontDistribution', 'DomainName'] },
-            HostedZoneId: process.env.hosted_zone_id,
+            HostedZoneId: '${param:root_domain_hosted_zone_id}',
           },
         },
       },
